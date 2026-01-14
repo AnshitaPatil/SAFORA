@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emergency Contacts</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #7209b7;
+            --secondary: #3f37c9;
+            --danger: #e63946;
+            --success: #2ec4b6;
+            --background: #13111C;
+            --card-bg: #1a1825;
+            --text: #e9ecef;
+            --text-secondary: #adb5bd;
+            --border: #2f2b3a;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            background: var(--background);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 2rem 1rem;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 500px;
+            background: var(--card-bg);
+            border-radius: 24px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            padding: 2rem;
+            text-align: center;
+            position: relative;
+        }
+
+        .back-button {
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            transition: all 0.3s ease;
+        }
+
+        .back-button:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.1);
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin: 0;
+            color: white;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .header::after {
+            content: '';
+            position: absolute;
+            bottom: -20px;
+            left: 0;
+            right: 0;
+            height: 40px;
+            background: var(--card-bg);
+            border-radius: 50% 50% 0 0;
+        }
+
+        .contacts-wrapper {
+            padding: 2rem;
+        }
+
+        .contact {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 16px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s ease;
+            border: 1px solid var(--border);
+        }
+
+        .contact:hover {
+            transform: translateY(-2px);
+            background: rgba(255, 255, 255, 0.05);
+            border-color: var(--primary);
+        }
+
+        .contact-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .contact-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            color: white;
+        }
+
+        .contact-details {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .contact-name {
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .emergency-number {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .delete-button {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: rgba(230, 57, 70, 0.1);
+            color: var(--danger);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .delete-button:hover {
+            background: rgba(230, 57, 70, 0.2);
+            transform: rotate(90deg);
+        }
+
+        .add-contact {
+            margin-top: 2rem;
+            text-align: center;
+        }
+
+        .add-button {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .add-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(114, 9, 183, 0.3);
+        }
+
+        .input-form {
+            display: none;
+            margin-top: 1.5rem;
+            animation: slideDown 0.4s ease;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .input-field {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border);
+            padding: 0.8rem 1rem;
+            border-radius: 12px;
+            color: var(--text);
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: var(--primary);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .save-button {
+            background: var(--success);
+            color: white;
+            border: none;
+            padding: 0.8rem 2rem;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+        }
+
+        .save-button:hover {
+            background: #25a898;
+            transform: translateY(-2px);
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @media (max-width: 480px) {
+            .input-group {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <button class="back-button" onclick="goBack()" title="Go Back">
+                <i class="fas fa-arrow-left"></i>
+            </button>
+            <h1>Emergency Contacts</h1>
+        </div>
+        
+        <div class="contacts-wrapper">
+            <div id="contact-list">
+                <!-- Contacts will be loaded dynamically from server -->
+            </div>
+
+            <div class="add-contact">
+                <button class="add-button" onclick="toggleInputForm()">
+                    <i class="fas fa-plus"></i>
+                    Add Contact
+                </button>
+            </div>
+
+            <div class="input-form" id="input-form">
+                <div class="input-group">
+                    <input type="text" id="name" class="input-field" placeholder="Contact Name" required>
+                    <input type="tel" id="number" class="input-field" placeholder="Phone Number (10 digits or number starting with 91)" required>
+                </div>
+                <div style="margin-bottom: 1rem; padding: 0.8rem; background: rgba(46, 196, 182, 0.1); border-radius: 8px; border-left: 3px solid var(--success);">
+                    <p style="color: var(--text-secondary); font-size: 0.85rem; margin: 0; line-height: 1.4;">
+                        <i class="fas fa-sms"></i> Enter <strong>10 digits</strong> (e.g., 753975010) OR full number with country code (e.g., 919175458795).
+                        <br><i class="fas fa-broadcast-tower"></i> System detects if number already has 91 or adds it automatically. SMS sent to <strong>ALL Indian carriers</strong>.
+                    </p>
+                </div>
+                <input type="hidden" id="carrier" value="auto">
+                <button class="save-button" onclick="addContact()">Save Contact</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+       function toggleInputForm() {
+  const form = document.getElementById('input-form');
+  form.style.display =
+    form.style.display === 'none' || form.style.display === ''
+      ? 'block'
+      : 'none';
+}
+
+        function addContact() {
+  const nameInput = document.getElementById('name');
+  const numberInput = document.getElementById('number');
+
+  const contactName = nameInput.value.trim();
+  let phoneNumber = numberInput.value.trim();
+
+  if (!contactName || !phoneNumber) {
+    alert("Please fill in both fields.");
+    return;
+  }
+
+  phoneNumber = phoneNumber.replace(/[\s+\-]/g, '');
+
+  if (!phoneNumber.startsWith('91')) {
+    if (!/^\d{10}$/.test(phoneNumber) || !/^[6-9]/.test(phoneNumber)) {
+      alert("Enter valid Indian mobile number");
+      return;
+    }
+    phoneNumber = '91' + phoneNumber;
+  }
+
+  console.log("📩 Sending to Flutter:", contactName, phoneNumber);
+
+  if (window.ContactChannel) {
+    window.ContactChannel.postMessage(JSON.stringify({
+      name: contactName,
+      number: phoneNumber
+    }));
+  } else {
+    alert("Flutter bridge not available");
+    return;
+  }
+
+  addContactToDOM(contactName, phoneNumber);
+
+  nameInput.value = "";
+  numberInput.value = "";
+  toggleInputForm();
+}
+
+        function deleteContact(element) {
+            const contactDiv = element.closest('.contact');
+            contactDiv.style.opacity = '0';
+            contactDiv.style.transform = 'scale(0.9)';
+            setTimeout(() => {
+                contactDiv.remove();
+                saveContacts();
+            }, 300);
+        }
+
+        function goBack() {
+            window.location.href = '/';
+        }
+
+        // Load contacts from server on page load
+        async function loadContacts() {
+            try {
+                // Get Firebase token from localStorage or sessionStorage
+                const token = localStorage.getItem('firebaseToken') || sessionStorage.getItem('firebaseToken');
+                
+                const headers = {
+                    'Content-Type': 'application/json'
+                };
+                
+                // Add Authorization header if token exists
+                if (token) {
+                    headers['Authorization'] = `Bearer ${token}`;
+                }
+                
+                const response = await fetch('/get_emergency_contacts', {
+                    headers: headers
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    const contactList = document.getElementById('contact-list');
+                    contactList.innerHTML = '';
+                    
+                    if (data.phone_numbers && data.phone_numbers.length > 0) {
+                        const names = data.contact_names || [];
+                        data.phone_numbers.forEach((contact, index) => {
+                            // Contact format: number@carrier.com (e.g., 9175365432@airtelmail.com)
+                            // But we'll display without carrier since SMS goes to all
+                            const name = names[index] || `Contact ${index + 1}`;
+                            addContactToDOM(name, contact);
+                        });
+                    } else {
+                        // Show empty state message
+                        contactList.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 2rem;">No emergency contacts. Click "Add Contact" to add one.</p>';
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading contacts:', error);
+            }
+        }
+
+        // Save contacts to server
+        async function saveContacts() {
+            const contacts = [];
+            const contactMap = new Map(); // Store name -> number mapping
+            
+            document.querySelectorAll('.contact').forEach(contactDiv => {
+                const name = contactDiv.querySelector('.contact-name').textContent.trim();
+                // Get the full number from data attribute or reconstruct from display
+                const numberDisplay = contactDiv.querySelector('.emergency-number').textContent.trim();
+                // Reconstruct full format - if it has @ use it, otherwise add default carrier
+                let fullNumber = numberDisplay.replace(/[\s-]/g, '').replace('+', '');
+                if (!fullNumber.includes('@')) {
+                    // Add default carrier for storage (but sending will use all carriers)
+                    fullNumber = fullNumber + '@airtelmail.com';
+                }
+                contactMap.set(name, fullNumber);
+                contacts.push(fullNumber);
+            });
+
+            try {
+                // Get Firebase token from localStorage or sessionStorage
+                const token = localStorage.getItem('firebaseToken') || sessionStorage.getItem('firebaseToken');
+                
+                const headers = {
+                    'Content-Type': 'application/json'
+                };
+                
+                // Add Authorization header if token exists
+                if (token) {
+                    headers['Authorization'] = `Bearer ${token}`;
+                }
+                
+                const response = await fetch('/save_emergency_contacts', {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({ 
+                        phone_numbers: contacts,
+                        contact_names: Array.from(contactMap.keys())
+                    })
+                });
+                
+                if (response.ok) {
+                    console.log('Contacts saved successfully');
+                }
+            } catch (error) {
+                console.error('Error saving contacts:', error);
+            }
+        }
+
+        function addContactToDOM(name, number) {
+  const list = document.getElementById('contact-list');
+  const div = document.createElement('div');
+  div.className = 'contact';
+  div.innerHTML = `
+    <div class="contact-info">
+      <div class="contact-icon"><i class="fas fa-user"></i></div>
+      <div class="contact-details">
+        <span class="contact-name">${name}</span>
+        <span class="emergency-number">+${number}</span>
+      </div>
+    </div>
+  `;
+  list.appendChild(div);
+}
+
+        
+    </script>
+    <script src="{{ url_for('static', filename='alertPolling.js') }}"></script>
+</body>
+</html>

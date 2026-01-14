@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "299324417871",
+    "project_id": "safetyai-ae643",
+    "storage_bucket": "safetyai-ae643.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:299324417871:android:7f052c2827dbcc7a10073a",
+        "android_client_info": {
+          "package_name": "com.example.safetyai"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCNt7dc2te0gkQ76maDUEFmlG3bD4bVST4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:299324417871:android:ad3202c27a6b0f3010073a",
+        "android_client_info": {
+          "package_name": "com.example.safora_flutter"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCNt7dc2te0gkQ76maDUEFmlG3bD4bVST4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

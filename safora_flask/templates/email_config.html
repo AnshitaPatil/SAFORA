@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Email Configuration</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #7209b7;
+            --secondary: #3f37c9;
+            --danger: #e63946;
+            --success: #2ec4b6;
+            --background: #13111C;
+            --card-bg: #1a1825;
+            --text: #e9ecef;
+            --text-secondary: #adb5bd;
+            --border: #2f2b3a;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            background: var(--background);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 2rem 1rem;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 600px;
+            background: var(--card-bg);
+            border-radius: 24px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            padding: 2rem;
+            text-align: center;
+            position: relative;
+        }
+
+        .back-button {
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            transition: all 0.3s ease;
+            text-decoration: none;
+        }
+
+        .back-button:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(1.1);
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin: 0;
+            color: white;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .content {
+            padding: 2rem;
+        }
+
+        .info-box {
+            background: rgba(46, 196, 182, 0.1);
+            border: 1px solid var(--success);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .info-box h3 {
+            color: var(--success);
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .info-box p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            line-height: 1.6;
+            margin-bottom: 0.5rem;
+        }
+
+        .info-box a {
+            color: var(--success);
+            text-decoration: none;
+        }
+
+        .info-box a:hover {
+            text-decoration: underline;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 0.75rem;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 1rem;
+            transition: all 0.3s ease;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--primary);
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .form-group small {
+            display: block;
+            margin-top: 0.5rem;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(114, 9, 183, 0.4);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .status-message {
+            margin-top: 1rem;
+            padding: 1rem;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .status-message.success {
+            background: rgba(46, 196, 182, 0.1);
+            border: 1px solid var(--success);
+            color: var(--success);
+            display: block;
+        }
+
+        .status-message.error {
+            background: rgba(230, 57, 70, 0.1);
+            border: 1px solid var(--danger);
+            color: var(--danger);
+            display: block;
+        }
+
+        .password-toggle {
+            position: relative;
+        }
+
+        .password-toggle-icon {
+            position: absolute;
+            right: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: pointer;
+            color: var(--text-secondary);
+            font-size: 1.2rem;
+        }
+
+        .password-toggle-icon:hover {
+            color: var(--text);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <a href="/" class="back-button">
+                <i class="fas fa-arrow-left"></i>
+            </a>
+            <h1><i class="fas fa-envelope"></i> Email Configuration</h1>
+        </div>
+
+        <div class="content">
+            <div class="info-box">
+                <h3><i class="fas fa-info-circle"></i> Why configure Gmail?</h3>
+                <p>SMS alerts are sent via Gmail's email-to-SMS gateways. This is completely FREE and sends actual SMS messages to phone numbers.</p>
+                <p><strong>How to get Gmail App Password:</strong></p>
+                <ol style="margin-left: 1.5rem; margin-top: 0.5rem;">
+                    <li>Go to <a href="https://myaccount.google.com/apppasswords" target="_blank">Google App Passwords</a></li>
+                    <li>Enable 2-Step Verification (if not enabled)</li>
+                    <li>Create app password for "Mail"</li>
+                    <li>Copy the 16-character password</li>
+                    <li>Paste it below (remove spaces)</li>
+                </ol>
+            </div>
+
+            <form id="emailConfigForm">
+                <div class="form-group">
+                    <label for="alert_email">Gmail Address</label>
+                    <input type="email" id="alert_email" name="alert_email" placeholder="your-email@gmail.com" required>
+                    <small>Enter your Gmail address</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="alert_email_password">Gmail App Password</label>
+                    <div class="password-toggle">
+                        <input type="password" id="alert_email_password" name="alert_email_password" placeholder="16-character app password" required>
+                        <i class="fas fa-eye password-toggle-icon" id="togglePassword"></i>
+                    </div>
+                    <small>Use Gmail App Password (16 characters), NOT your regular password</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="smtp_server">SMTP Server</label>
+                    <input type="text" id="smtp_server" name="smtp_server" value="smtp.gmail.com" required>
+                    <small>Default: smtp.gmail.com</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="smtp_port">SMTP Port</label>
+                    <input type="number" id="smtp_port" name="smtp_port" value="587" required>
+                    <small>Default: 587</small>
+                </div>
+
+                <div class="button-group">
+                    <button type="button" class="btn btn-secondary" onclick="testConnection()">
+                        <i class="fas fa-vial"></i> Test Connection
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Save Configuration
+                    </button>
+                </div>
+
+                <div id="statusMessage" class="status-message"></div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Load existing configuration
+        async function loadConfig() {
+            try {
+                const token = localStorage.getItem('firebaseToken') || sessionStorage.getItem('firebaseToken');
+                if (!token) {
+                    showMessage('Please login first', 'error');
+                    return;
+                }
+
+                const response = await fetch('/api/get_email_config', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.config) {
+                        if (data.config.configured) {
+                            document.getElementById('alert_email').value = data.config.alert_email || '';
+                            document.getElementById('smtp_server').value = data.config.smtp_server || 'smtp.gmail.com';
+                            document.getElementById('smtp_port').value = data.config.smtp_port || 587;
+                            showMessage('Existing configuration loaded', 'success');
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading config:', error);
+            }
+        }
+
+        // Password toggle
+        document.getElementById('togglePassword').addEventListener('click', function() {
+            const passwordInput = document.getElementById('alert_email_password');
+            const icon = this;
+            
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                icon.classList.remove('fa-eye');
+                icon.classList.add('fa-eye-slash');
+            } else {
+                passwordInput.type = 'password';
+                icon.classList.remove('fa-eye-slash');
+                icon.classList.add('fa-eye');
+            }
+        });
+
+        // Test connection
+        async function testConnection() {
+            const form = document.getElementById('emailConfigForm');
+            const formData = new FormData(form);
+            
+            const token = localStorage.getItem('firebaseToken') || sessionStorage.getItem('firebaseToken');
+            if (!token) {
+                showMessage('Please login first', 'error');
+                return;
+            }
+
+            const data = {
+                alert_email: formData.get('alert_email'),
+                alert_email_password: formData.get('alert_email_password'),
+                smtp_server: formData.get('smtp_server'),
+                smtp_port: formData.get('smtp_port')
+            };
+
+            if (!data.alert_email || !data.alert_email_password) {
+                showMessage('Please fill in email and password', 'error');
+                return;
+            }
+
+            try {
+                showMessage('Testing connection...', 'success');
+                
+                const response = await fetch('/api/test_email_config', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    showMessage(result.message || 'Connection test successful!', 'success');
+                } else {
+                    showMessage(result.error || 'Connection test failed', 'error');
+                }
+            } catch (error) {
+                showMessage('Error testing connection: ' + error.message, 'error');
+            }
+        }
+
+        // Save configuration
+        document.getElementById('emailConfigForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const token = localStorage.getItem('firebaseToken') || sessionStorage.getItem('firebaseToken');
+            
+            if (!token) {
+                showMessage('Please login first', 'error');
+                return;
+            }
+
+            const data = {
+                alert_email: formData.get('alert_email'),
+                alert_email_password: formData.get('alert_email_password'),
+                smtp_server: formData.get('smtp_server'),
+                smtp_port: formData.get('smtp_port')
+            };
+
+            try {
+                showMessage('Saving configuration...', 'success');
+                
+                const response = await fetch('/api/save_email_config', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    showMessage(result.message || 'Configuration saved successfully!', 'success');
+                } else {
+                    showMessage(result.error || 'Failed to save configuration', 'error');
+                }
+            } catch (error) {
+                showMessage('Error saving configuration: ' + error.message, 'error');
+            }
+        });
+
+        function showMessage(message, type) {
+            const statusMsg = document.getElementById('statusMessage');
+            statusMsg.textContent = message;
+            statusMsg.className = `status-message ${type}`;
+            
+            setTimeout(() => {
+                statusMsg.className = 'status-message';
+            }, 5000);
+        }
+
+        // Load config on page load
+        loadConfig();
+    </script>
+</body>
+</html>
+

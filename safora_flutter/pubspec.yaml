@@ -1,0 +1,54 @@
+name: safora_flutter
+description: "AI-based Women Safety App using Flutter, Firebase, and Flask"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.9.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # ✅ Firebase (compatible with Flutter 3.9)
+  firebase_core: ^3.3.0
+  firebase_auth: ^5.3.1
+  firebase_storage: ^12.3.2
+  cloud_firestore: ^5.4.4
+
+  # ✅ UI / Utility
+  google_fonts: ^6.2.1
+  cupertino_icons: ^1.0.8
+  fluttertoast: ^8.2.4
+
+  # ✅ Networking
+  http: ^1.2.2
+  url_launcher: ^6.3.1
+
+  # ✅ WebView
+  webview_flutter: ^4.8.0
+  webview_flutter_android: ^3.16.0
+  webview_flutter_wkwebview: ^3.12.0
+
+  # ✅ Device sensors / permissions / media
+  permission_handler: ^11.1.0
+  sensors_plus: ^4.0.2
+  geolocator: ^10.0.1
+  image_picker: ^1.1.2
+  path_provider: ^2.1.3
+  record: ^4.4.4
+  telephony: ^0.2.0  # ✅ Adding telephony plugin back
+  camera: ^0.10.6
+  intl: ^0.19.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/logo.jpg
