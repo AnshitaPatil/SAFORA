@@ -26,10 +26,32 @@ import json
 from flask import Flask, request, jsonify
 import firebase_admin
 from firebase_admin import credentials, firestore
+import uuid
+from supabase import create_client
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# ================= SUPABASE SETUP =================
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET")
+
+if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY or not SUPABASE_BUCKET:
+    raise RuntimeError("❌ Supabase environment variables not set")
+
+supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+# =================================================
+
 
 cred = credentials.Certificate("serviceAccountKey.json")
 firebase_admin.initialize_app(cred)
 db = firestore.client()
+
+current_alert_id = None
+current_firebase_uid = None
+pending_audio_link = None
+
 
 def load_emergency_contacts(firebase_uid=None):
     """
@@ -169,6 +191,61 @@ def save_keyword(keyword):
     with open(KEYWORD_FILE, 'w') as f:
         json.dump({'keyword': keyword}, f)
 
+def get_firebase_uid_from_request():
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        return None
+
+    try:
+        parts = auth_header.split()
+        if len(parts) == 2 and parts[0].lower() == 'bearer':
+            decoded = verify_firebase_token(parts[1])
+            return decoded.get('uid') if decoded else None
+    except Exception:
+        return None
+
+    return None
+
+
+
+
+@app.route('/add_emergency_contact', methods=['POST'])
+def add_emergency_contact():
+    firebase_uid = get_firebase_uid_from_request()
+    if not firebase_uid:
+        return jsonify({"success": False, "error": "Unauthorized"}), 401
+
+    data = request.get_json(force=True)
+    name = data.get("name")
+    phone = data.get("phone")
+
+    if not name or not phone:
+        return jsonify({"success": False, "error": "Invalid data"}), 400
+
+    doc_ref = db.collection("users").document(firebase_uid)
+    doc = doc_ref.get()
+
+    contacts = []
+    if doc.exists:
+        contacts = doc.to_dict().get("emergencyContacts", [])
+
+    # 🔒 prevent duplicate numbers
+    for c in contacts:
+        if c.get("phone") == phone:
+            return jsonify({"success": False, "error": "Contact already exists"}), 409
+
+    new_contact = {
+        "id": str(int(time.time() * 1000)),  # simple stable id
+        "name": name,
+        "phone": phone
+    }
+
+    contacts.append(new_contact)
+
+    doc_ref.set({"emergencyContacts": contacts}, merge=True)
+
+    return jsonify({"success": True, "contact": new_contact})
+
 @app.route('/update_keyword', methods=['POST'])
 def update_keyword():
     try:
@@ -197,7 +274,12 @@ logging.basicConfig(level=logging.INFO)
 
 # Create events for alert handling
 alert_cancelled = Event()
+alert_id_ready = Event()
 alert_active = False
+alert_payload = {}
+alert_lock = Lock()
+pending_evidence = {}
+pending_evidence_lock = Lock()
 
 # Helper Functions
 def calculate_distance(lat1, lon1, lat2, lon2):
@@ -268,7 +350,37 @@ def record_audio(file_path="output.wav", record_seconds=8):
         wf.setframerate(RATE)
         wf.writeframes(b''.join(frames))
     print("Recording finished.")
+    #logging.info(f"DEBUG CURRENT UID: {current_firebase_uid}")
     return file_path
+
+def upload_video_to_supabase(firebase_uid: str, alert_id: str, file_path: str):
+    """
+    Uploads video/audio evidence to Supabase Storage and returns a signed URL
+    """
+    try:
+        # Path inside bucket
+        object_path = f"{firebase_uid}/{alert_id}.mp4"
+
+        # Upload file
+        with open(file_path, "rb") as f:
+            supabase.storage.from_(SUPABASE_BUCKET).upload(
+                object_path,
+                f,
+                {"content-type": "video/mp4"}
+            )
+
+        # Generate signed URL (valid for 1 hour = 3600s)
+        signed_url = supabase.storage.from_(SUPABASE_BUCKET).create_signed_url(
+            object_path,
+            3600
+        )
+
+        return signed_url["signedURL"]
+
+    except Exception as e:
+        logging.error(f"❌ Supabase upload failed: {e}")
+        return None
+
 
 def extract_features(file_path):
     try:
@@ -346,7 +458,27 @@ def toggle_sleep_mode(is_sleeping):
             logging.info("SLEEP MODE DEACTIVATED - System resuming normal operation")
 
 
+@app.route("/test_supabase_upload", methods=["GET"])
+def test_supabase_upload():
+    try:
+        test_uid = "test_user"
+        test_alert_id = "test_alert"
 
+        url = upload_video_to_supabase(
+            firebase_uid=test_uid,
+            alert_id=test_alert_id,
+            file_path="demo_video.mp4"
+        )
+
+        return jsonify({
+            "success": True,
+            "signed_url": url
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
 
 @app.route('/sleep_status', methods=['GET'])
 def get_sleep_status():
@@ -480,7 +612,7 @@ def two_stage_verification(recognizer, source):
 
         # Keyword detection
         try:
-            audio = recognizer.listen(source, timeout=3, phrase_time_limit=3)
+            audio = recognizer.listen(source, timeout=2, phrase_time_limit=3)
             text = recognizer.recognize_google(audio)
             kw = load_keyword().lower()
             stage1["keyword"] = kw in text.lower()
@@ -604,11 +736,40 @@ def predict_audio(file_path):
         return False
 
 def handle_alert_process(audio_file_path, location, map_link, shareable_link, firebase_uid=None):
-    """Handle the alert process - set flag and prepare alert data for frontend/Flutter"""
-    global alert_active
+    global alert_active, alert_payload
+    with alert_lock:
+        alert_payload = {
+            "audio": shareable_link,
+            "location": location,
+            "mapLink": map_link,
+            "firebase_uid": firebase_uid,
+            "timestamp": time.time()
+        }
     alert_active = True
     alert_cancelled.clear()
-    logging.info(f"Alert process started. Location: {location}, Map: {map_link}, audio: {shareable_link}")
+
+def ensure_active_alert(firebase_uid):
+    global current_alert_id, current_firebase_uid
+
+    if current_alert_id and current_firebase_uid:
+        return current_alert_id
+
+    alert_id = str(uuid.uuid4())
+
+    db.collection("alerts").document(alert_id).set({
+        "userId": firebase_uid,
+        "isActive": True,
+        "createdAt": firestore.SERVER_TIMESTAMP,
+        "lastUpdated": firestore.SERVER_TIMESTAMP,
+        "latestVideoUrl": None,
+        "location": {"lat": None, "lng": None}
+    })
+
+    current_alert_id = alert_id
+    current_firebase_uid = firebase_uid
+
+    logging.info(f"🆕 Alert context created by audio thread: {alert_id}")
+    return alert_id
 
 @app.route('/')
 def index():
@@ -653,6 +814,20 @@ def confirm_alert():
     try:
         firebase_uid = None
         auth_header = request.headers.get('Authorization', None)
+
+        if auth_header:
+            parts = auth_header.split()
+            if len(parts) == 2 and parts[0].lower() == 'bearer':
+                decoded = verify_firebase_token(parts[1])
+                if decoded:
+                    firebase_uid = decoded.get('uid')
+                    logging.info(f"👤 User identified for alert: {firebase_uid}")
+
+        if not firebase_uid:
+            return jsonify({
+                "success": False,
+                "error": "User not authenticated. Firebase token missing or invalid."
+            }), 401
         if auth_header:
             try:
                 parts = auth_header.split()
@@ -662,6 +837,8 @@ def confirm_alert():
                     if decoded:
                         firebase_uid = decoded.get('uid')
                         logging.info(f"👤 User identified for alert: {firebase_uid}")
+                        global current_firebase_uid
+                        current_firebase_uid = firebase_uid
             except Exception as e:
                 logging.warning(f"⚠️ Could not get user from token: {e}")
 
@@ -683,8 +860,7 @@ def confirm_alert():
             else "Map link unavailable"
         )
         base_url = request.url_root.rstrip('/')
-        audio_link = f"{base_url}/audio_stream"
-        video_link = f"{base_url}/video_stream"
+        
 
         # 📱 Load user’s emergency contacts from Firebase DB
         contacts = load_emergency_contacts(firebase_uid=firebase_uid)
@@ -698,18 +874,19 @@ def confirm_alert():
         logging.info(f"📞 Emergency Contacts Found: {len(phone_numbers)}")
         logging.info("======================================")
 
+        
+
         results = {
             "success": True,
             "message": "✅ Alert data prepared. Flutter (Telephony) should now send SMS automatically.",
             "phoneNumbers": phone_numbers,
             "location": location,
             "mapLink": map_link,
-            "audioLink": audio_link,
-            "videoLink": video_link
+            
+           # "audioLink": audio_link,
+            #"videoLink": video_link
         }
 
-        alert_active = False
-        alert_cancelled.set()
 
         # ✅ Safe return to Flutter — avoids connection crash
         try:
@@ -844,6 +1021,63 @@ def generate_response():
         logging.error(f"Error generating response: {e}")
         return jsonify({"error": str(e)}), 500
 
+
+@app.route('/api/upload_clip', methods=['POST'])
+def upload_clip():
+    global current_alert_id, current_firebase_uid
+
+    try:
+        alert_id   = request.form.get('alert_id')
+        firebase_uid = request.form.get('firebase_uid')
+        clip_index = request.form.get('clip_index', '0')
+
+        if not alert_id or not firebase_uid:
+            return jsonify({"success": False, "error": "alert_id and firebase_uid are required"}), 400
+
+        if 'clip' not in request.files:
+            return jsonify({"success": False, "error": "No clip file in request"}), 400
+
+        clip_file = request.files['clip']
+
+        # ✅ FIX: Read directly into memory — no /tmp path needed
+        # Old code wrote to /tmp/{uid}_{alertId}_clip.mp4 which crashed on
+        # long UIDs and special characters in the combined filename
+        file_bytes = clip_file.read()
+
+        object_path = f"{firebase_uid}/{alert_id}_clip{clip_index}.mp4"
+
+        supabase.storage.from_(SUPABASE_BUCKET).upload(
+            object_path,
+            file_bytes,
+            {"content-type": "video/mp4"}  # video, not audio
+        )
+
+        signed = supabase.storage.from_(SUPABASE_BUCKET).create_signed_url(
+            object_path, 86400  # 24 hours
+        )
+        clip_url = signed["signedURL"]
+
+        db.collection("alerts").document(alert_id).update({
+            "latestVideoUrl": clip_url,
+            f"clips.clip{clip_index}": clip_url,
+            "videoReady": True,  # ✅ this is what Flutter polls for
+            "lastUpdated": firestore.SERVER_TIMESTAMP
+        })
+
+        logging.info(f"✅ Clip {clip_index} uploaded: {clip_url}")
+
+        return jsonify({
+            "success": True,
+            "clip_index": clip_index,
+            "url": clip_url
+        }), 200
+
+    except Exception as e:
+        logging.error(f"❌ upload_clip failed: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+
 @app.route('/api/trigger_alert', methods=['POST'])
 def trigger_alert():
     """
@@ -851,12 +1085,68 @@ def trigger_alert():
     Called directly by Flutter when sensors detect danger.
     """
     global alert_active
+    global current_alert_id, current_firebase_uid
+    global pending_audio_link
 
     try:
         data = request.get_json(force=True)
         logging.info(f"🚨 AUTO ALERT RECEIVED FROM FLUTTER: {data}")
 
+        # ✅ 1. EXTRACT firebase UID FIRST
         firebase_uid = data.get("firebaseUid") or data.get("firebase_uid")
+
+        if not firebase_uid:
+            return jsonify({
+                "success": False,
+                "error": "firebaseUid missing in request"
+            }), 400
+
+        # ✅ 2. Reuse existing alert if audio thread already created one,
+        #       otherwise create a new one
+        if current_alert_id:
+            # Audio thread already created an alert — upgrade it with real UID
+            alert_id = current_alert_id
+            logging.info(f"♻️ Reusing audio-thread alert: {alert_id}")
+            db.collection("alerts").document(alert_id).update({
+                "userId": firebase_uid,
+                "lastUpdated": firestore.SERVER_TIMESTAMP,
+            })
+        else:
+            # No alert yet — create a fresh one
+            alert_id = str(uuid.uuid4())
+            db.collection("alerts").document(alert_id).set({
+                "userId": firebase_uid,
+                "isActive": True,
+                "createdAt": firestore.SERVER_TIMESTAMP,
+                "lastUpdated": firestore.SERVER_TIMESTAMP,
+                "latestVideoUrl": None,
+                "location": {
+                    "lat": None,
+                    "lng": None
+                }
+            })
+
+        # ✅ 3. ASSIGN GLOBALS
+        current_alert_id = alert_id
+        current_firebase_uid = firebase_uid
+        alert_id_ready.set()
+
+        # ✅ 4. MARK ALERT ACTIVE
+        alert_active = True
+
+        # 🔗 If audio evidence was uploaded earlier, attach it now
+        if pending_audio_link:
+            try:
+                db.collection("alerts").document(alert_id).update({
+                    "latestVideoUrl": pending_audio_link,
+                    "lastUpdated": firestore.SERVER_TIMESTAMP
+                })
+
+                logging.info("🔗 Stored audio evidence linked to new alert")
+                pending_audio_link = None
+
+            except Exception as e:
+                logging.error(f"❌ Failed to attach stored audio evidence: {e}")
 
         # 🌍 Location (best-effort)
         try:
@@ -875,8 +1165,7 @@ def trigger_alert():
         )
 
         base_url = request.url_root.rstrip('/')
-        audio_link = f"{base_url}/audio_stream"
-        video_link = f"{base_url}/video_stream"
+        viewer_link = f"{base_url}/alert/{alert_id}"
 
         # 📱 Load emergency contacts
         contacts = load_emergency_contacts(firebase_uid=firebase_uid)
@@ -888,25 +1177,24 @@ def trigger_alert():
         logging.info(f"📍 Location: {location}")
         logging.info(f"📞 Emergency Contacts Found: {len(phone_numbers)}")
         logging.info("======================================")
+        logging.info(f"DEBUG UID RECEIVED: {firebase_uid}")
 
-        # 🔴 IMPORTANT: kill web countdown flow
-        alert_active = False
+        # 🔴 Stop any web countdown flow if running
         alert_cancelled.set()
 
         return jsonify({
             "success": True,
             "auto": True,
+            "alertId": alert_id,
+            "viewerLink": viewer_link,
             "phoneNumbers": phone_numbers,
-            "location": location,
-            "mapLink": map_link,
-            "audioLink": audio_link,
-            "videoLink": video_link,
-            "message": "Auto alert prepared. Flutter should send SMS immediately."
+            "message": "Auto alert created. Send SMS with viewerLink."
         }), 200
 
     except Exception as e:
         logging.error(f"❌ Error in auto trigger_alert: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
+        
 
 def main_audio_monitoring():
     """
@@ -914,8 +1202,8 @@ def main_audio_monitoring():
     If audio threat is verified → signals Flutter via alert_active.
     NO countdown, NO manual confirmation, NO UI dependency.
     """
-    global alert_active, detection_enabled
-
+    global alert_active, detection_enabled, current_alert_id, current_firebase_uid
+    
     try:
         if not initialize_audio():
             logging.error("❌ Audio monitoring could not start")
@@ -942,20 +1230,69 @@ def main_audio_monitoring():
                         continue
 
                     # 🚨 AUDIO THREAT CONFIRMED
-                    logging.info("🚨 AUDIO THREAT CONFIRMED — SIGNALING FLUTTER")
+                   # 🚨 AUDIO THREAT CONFIRMED
+                    logging.info("🚨 AUDIO THREAT CONFIRMED — SIGNALING FLUTTER VIA FIRESTORE")
 
-                    # 🔔 SIGNAL FLUTTER (THIS WAS MISSING)
                     alert_active = True
                     alert_cancelled.clear()
+
+                    # ✅ Ring the bell — Flutter listener reacts in under 500ms
+                    try:
+                        db.collection("alert_triggers").document("current").set({
+                            "active": True,
+                            "triggeredAt": firestore.SERVER_TIMESTAMP,
+                            "source": "audio"
+                        })
+                        logging.info("✅ Firestore trigger doc written")
+                    except Exception as e:
+                        logging.error(f"❌ Firestore trigger write failed: {e}")
 
                     # 🎙️ Record evidence
                     audio_file_path = record_audio(record_seconds=8)
 
+                    # ⏳ Give Flutter up to 5s to call /api/trigger_alert
+                    # If Flutter already called it, alert_id_ready is already set → returns instantly
+                    # If this is audio-only trigger, times out after 5s and we create our own alert
+                    alert_id_ready.wait(timeout=15)
+                    alert_id_ready.clear()
+
+                    # 🔑 Ensure alert context exists
+                    shareable_link = None
+
                     try:
-                        shareable_link = upload_to_drive(audio_file_path)
+                        # If Flutter didn't create an alert, audio thread creates one now
+                        if not current_alert_id:
+                            logging.warning("⚠️ Flutter did not respond in time — holding audio as pending")
+                            if audio_file_path and os.path.exists(audio_file_path):
+                                pending_audio_link = audio_file_path  # Flutter will attach it when it calls /api/trigger_alert
+                            # Reset and skip — do NOT create a system alert
+                            current_alert_id = None
+                            current_firebase_uid = None
+                            alert_active = False
+                            time.sleep(5)
+                            continue
+
+                        shareable_link = upload_video_to_supabase(
+                            firebase_uid=current_firebase_uid,
+                            alert_id=current_alert_id,
+                            file_path=audio_file_path
+                        )
+
+                        if shareable_link:
+                            logging.info("✅ Audio evidence uploaded")
+                            db.collection("alerts").document(current_alert_id).update({
+                                "latestVideoUrl": shareable_link,
+        
+                                "lastUpdated": firestore.SERVER_TIMESTAMP
+                            })
+                            logging.info("🔗 Audio evidence bound to alert")
+                        else:
+                            logging.warning("⚠️ Audio upload returned no URL")
+
                     except Exception as e:
-                        logging.error(f"❌ Audio upload failed: {e}")
-                        shareable_link = "Audio upload failed"
+                        logging.error(f"❌ Supabase upload failed (audio thread): {e}")
+
+
 
                     # 🌍 Get location (best-effort)
                     try:
@@ -988,6 +1325,9 @@ def main_audio_monitoring():
 
                     # ⏸️ Cooldown to avoid repeated triggers
                     time.sleep(5)
+                    # 🔄 Reset alert context for next trigger
+                    current_alert_id = None
+                    current_firebase_uid = None
 
             except sr.UnknownValueError:
                 continue
@@ -1002,6 +1342,7 @@ def main_audio_monitoring():
 
     except Exception as e:
         logging.error(f"❌ Fatal error in audio monitoring thread: {e}")
+
 
 if __name__ == '__main__':
     # Initialize logging

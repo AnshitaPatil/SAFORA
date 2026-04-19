@@ -296,6 +296,10 @@
     </div>
 
     <script>
+        console.log("🔥 Token from Flutter:", window.firebaseToken);
+        function getAuthToken() {
+  return window.firebaseToken || null;
+}
        function toggleInputForm() {
   const form = document.getElementById('input-form');
   form.style.display =
@@ -339,7 +343,7 @@
   }
 
   addContactToDOM(contactName, phoneNumber);
-
+saveContacts(); // 🔥 THIS WAS MISSING
   nameInput.value = "";
   numberInput.value = "";
   toggleInputForm();
@@ -362,12 +366,14 @@
         // Load contacts from server on page load
         async function loadContacts() {
             try {
-                // Get Firebase token from localStorage or sessionStorage
-                const token = localStorage.getItem('firebaseToken') || sessionStorage.getItem('firebaseToken');
+                // Get Firebase token from 
+                // orage or sessionStorage
+                const token = getAuthToken();
                 
                 const headers = {
-                    'Content-Type': 'application/json'
-                };
+                'Content-Type': 'application/json',
+                 ...(token && { Authorization: `Bearer ${token}` })
+};
                 
                 // Add Authorization header if token exists
                 if (token) {
@@ -383,18 +389,17 @@
                     const contactList = document.getElementById('contact-list');
                     contactList.innerHTML = '';
                     
-                    if (data.phone_numbers && data.phone_numbers.length > 0) {
-                        const names = data.contact_names || [];
-                        data.phone_numbers.forEach((contact, index) => {
-                            // Contact format: number@carrier.com (e.g., 9175365432@airtelmail.com)
-                            // But we'll display without carrier since SMS goes to all
-                            const name = names[index] || `Contact ${index + 1}`;
-                            addContactToDOM(name, contact);
-                        });
-                    } else {
-                        // Show empty state message
-                        contactList.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 2rem;">No emergency contacts. Click "Add Contact" to add one.</p>';
-                    }
+                    if (Array.isArray(data) && data.length > 0) {
+  data.forEach(contact => {
+    addContactToDOM(contact.name, contact.number);
+  });
+} else {
+  contactList.innerHTML = `
+    <p style="text-align: center; color: var(--text-secondary); padding: 2rem;">
+      No emergency contacts. Click "Add Contact" to add one.
+    </p>
+  `;
+}
                 }
             } catch (error) {
                 console.error('Error loading contacts:', error);
@@ -403,52 +408,50 @@
 
         // Save contacts to server
         async function saveContacts() {
-            const contacts = [];
-            const contactMap = new Map(); // Store name -> number mapping
-            
-            document.querySelectorAll('.contact').forEach(contactDiv => {
-                const name = contactDiv.querySelector('.contact-name').textContent.trim();
-                // Get the full number from data attribute or reconstruct from display
-                const numberDisplay = contactDiv.querySelector('.emergency-number').textContent.trim();
-                // Reconstruct full format - if it has @ use it, otherwise add default carrier
-                let fullNumber = numberDisplay.replace(/[\s-]/g, '').replace('+', '');
-                if (!fullNumber.includes('@')) {
-                    // Add default carrier for storage (but sending will use all carriers)
-                    fullNumber = fullNumber + '@airtelmail.com';
-                }
-                contactMap.set(name, fullNumber);
-                contacts.push(fullNumber);
-            });
+  const phoneNumbers = [];
+  const contactNames = [];
 
-            try {
-                // Get Firebase token from localStorage or sessionStorage
-                const token = localStorage.getItem('firebaseToken') || sessionStorage.getItem('firebaseToken');
-                
-                const headers = {
-                    'Content-Type': 'application/json'
-                };
-                
-                // Add Authorization header if token exists
-                if (token) {
-                    headers['Authorization'] = `Bearer ${token}`;
-                }
-                
-                const response = await fetch('/save_emergency_contacts', {
-                    method: 'POST',
-                    headers: headers,
-                    body: JSON.stringify({ 
-                        phone_numbers: contacts,
-                        contact_names: Array.from(contactMap.keys())
-                    })
-                });
-                
-                if (response.ok) {
-                    console.log('Contacts saved successfully');
-                }
-            } catch (error) {
-                console.error('Error saving contacts:', error);
-            }
-        }
+  document.querySelectorAll('.contact').forEach(contactDiv => {
+    const name = contactDiv.querySelector('.contact-name')
+      .textContent.trim();
+
+    let number = contactDiv.querySelector('.emergency-number')
+      .textContent
+      .replace('+', '')
+      .replace(/\s+/g, '')
+      .replace(/-/g, '');
+
+    // Avoid duplicates
+    if (!phoneNumbers.includes(number)) {
+      phoneNumbers.push(number);
+      contactNames.push(name);
+    }
+  });
+
+  try {
+    const token = getAuthToken();
+
+    const response = await fetch('/save_emergency_contacts', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` })
+      },
+      body: JSON.stringify({
+        phone_numbers: phoneNumbers,
+        contact_names: contactNames
+      })
+    });
+
+    if (!response.ok) {
+      console.error('Failed to save contacts');
+    } else {
+      console.log('Contacts saved successfully');
+    }
+  } catch (error) {
+    console.error('Error saving contacts:', error);
+  }
+}
 
         function addContactToDOM(name, number) {
   const list = document.getElementById('contact-list');
@@ -465,7 +468,7 @@
   `;
   list.appendChild(div);
 }
-
+  document.addEventListener("DOMContentLoaded", loadContacts);
         
     </script>
     <script src="{{ url_for('static', filename='alertPolling.js') }}"></script>

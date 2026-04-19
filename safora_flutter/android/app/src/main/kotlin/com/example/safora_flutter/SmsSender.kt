@@ -12,6 +12,7 @@ import io.flutter.embedding.android.FlutterActivity
 class SmsSender(binaryMessenger: BinaryMessenger, private val activity: FlutterActivity) {
     private val CHANNEL = "sms_sender_channel"
     private val TAG = "SmsSender"
+    private val ENABLE_SMS = true
     
     private val channel = MethodChannel(binaryMessenger, CHANNEL)
 
@@ -42,30 +43,36 @@ class SmsSender(binaryMessenger: BinaryMessenger, private val activity: FlutterA
     }
 
     private fun sendSms(number: String, message: String): Boolean {
-        return try {
-            Log.d(TAG, "Attempting to send SMS to: $number with message: $message")
-            
-            // Check if we have the necessary permission
-            if (ActivityCompat.checkSelfPermission(activity, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) {
-                Log.e(TAG, "SEND_SMS permission not granted")
-                return false
-            }
-            
-            val smsManager = SmsManager.getDefault()
-            val parts = smsManager.divideMessage(message)
-            Log.d(TAG, "Message divided into ${parts.size} parts")
-            
-            // Send the SMS
-            smsManager.sendMultipartTextMessage(number, null, parts, null, null)
-            Log.d(TAG, "SMS sent successfully to: $number")
-            return true
-        } catch (e: SecurityException) {
-            Log.e(TAG, "Security exception when sending SMS - permission not granted", e)
-            return false
-        } catch (e: Exception) {
-            Log.e(TAG, "Error sending SMS to $number", e)
-            e.printStackTrace()
+
+    if (!ENABLE_SMS) {
+        Log.d(TAG, "🚫 DEV MODE: SMS DISABLED")
+        Log.d(TAG, "Would send to: $number")
+        Log.d(TAG, "Message: $message")
+        return true
+    }
+
+    return try {
+        Log.d(TAG, "Attempting to send SMS to: $number")
+
+        if (ActivityCompat.checkSelfPermission(
+                activity,
+                Manifest.permission.SEND_SMS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            Log.e(TAG, "SEND_SMS permission not granted")
             return false
         }
+
+        val smsManager = SmsManager.getDefault()
+        val parts = smsManager.divideMessage(message)
+        smsManager.sendMultipartTextMessage(number, null, parts, null, null)
+
+        Log.d(TAG, "SMS sent successfully")
+        true
+
+    } catch (e: Exception) {
+        Log.e(TAG, "Error sending SMS", e)
+        false
     }
+}
 }

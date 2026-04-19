@@ -5,12 +5,14 @@ import 'package:http/http.dart' as http;
 
 class ApiService {
   // ✅ Use your actual network IP (from Flask logs)
-  static const String _defaultLocalIp = "http://192.168.1.9:5000";
+  static const String _defaultLocalIp = "http://192.168.1.2:5000";
+  //static const String _defaultLocalIp = "http://10.45.192.127:5000";
 
   /// ✅ Automatically detects Flask server URL
   static Future<String> detectFlaskUrl() async {
     final testUrls = [
-      if (Platform.isAndroid) "http://192.168.1.9:5000", // Android emulator
+      //if (Platform.isAndroid) "http://10.23.189.127:5000", // Android emulator
+      if (Platform.isAndroid) "http://10.18.209.127:5000",
       if (Platform.isIOS) "http://localhost:5000", // iOS simulator
       _defaultLocalIp,
     ];
@@ -134,7 +136,7 @@ class ApiService {
       print("Error triggering alert: $e");
     }
   }
-
+  
   /// ✅ Get Flask URL for WebView
   static Future<String> getFlaskUrl() async {
     return await detectFlaskUrl();

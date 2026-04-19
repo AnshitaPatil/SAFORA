@@ -6,7 +6,7 @@ class SensorService {
   static StreamSubscription<AccelerometerEvent>? _accelerometerSubscription;
   static StreamSubscription<GyroscopeEvent>? _gyroscopeSubscription;
 
-  // ✅ Adjusted thresholds (less sensitive, realistic)
+  // ✅ Adjusted thresholds (same as your original)
   static const double SHAKE_THRESHOLD = 18.0;
   static const double MOTION_THRESHOLD = 6.0;
   static const double GYRO_ROTATION_THRESHOLD = 1.8;
@@ -66,7 +66,7 @@ class SensorService {
     _gyroscopeSubscription?.cancel();
   }
 
-  /// ✅ ACCELEROMETER — CLEAN + STABLE
+  /// ✅ FIXED ACCELEROMETER (noise filtered + proper decay)
   static void _processAccelerometer(double x, double y, double z) {
     _gravityX = _alphaLow * _gravityX + (1 - _alphaLow) * x;
     _gravityY = _alphaLow * _gravityY + (1 - _alphaLow) * y;
@@ -86,21 +86,20 @@ class SensorService {
       linearZ * linearZ
     );
 
-    _accelMagnitudes.add(magnitude);
-    if (_accelMagnitudes.length > BUFFER_SIZE) {
-      _accelMagnitudes.removeAt(0);
-    }
+    // ✅ Ignore tiny noise
+    if (magnitude < 2.5) return;
 
     if (magnitude > SHAKE_THRESHOLD) {
       _accelAbnormalCount++;
-    } else if (magnitude < MOTION_THRESHOLD) {
-      _accelAbnormalCount = max(0, _accelAbnormalCount - 1);
+    } else {
+      // ✅ Faster decay when stable
+      _accelAbnormalCount = max(0, _accelAbnormalCount - 2);
     }
 
     _accelerometerThreat = _accelAbnormalCount >= STABLE_COUNT_REQUIRED;
   }
 
-  /// ✅ GYROSCOPE — FILTERED ONLY
+  /// ✅ FIXED GYROSCOPE (noise filtered + proper decay)
   static void _processGyroscope(double x, double y, double z) {
     _filteredGyroX = _alphaSmooth * x + (1 - _alphaSmooth) * _filteredGyroX;
     _filteredGyroY = _alphaSmooth * y + (1 - _alphaSmooth) * _filteredGyroY;
@@ -116,15 +115,13 @@ class SensorService {
       _filteredGyroZ * _filteredGyroZ
     );
 
-    _gyroMagnitudes.add(magnitude);
-    if (_gyroMagnitudes.length > BUFFER_SIZE) {
-      _gyroMagnitudes.removeAt(0);
-    }
+    // ✅ Ignore micro rotation noise
+    if (magnitude < 0.5) return;
 
     if (magnitude > GYRO_ROTATION_THRESHOLD) {
       _gyroAbnormalCount++;
     } else {
-      _gyroAbnormalCount = max(0, _gyroAbnormalCount - 1);
+      _gyroAbnormalCount = max(0, _gyroAbnormalCount - 2);
     }
 
     _gyroscopeThreat = _gyroAbnormalCount >= STABLE_COUNT_REQUIRED;
