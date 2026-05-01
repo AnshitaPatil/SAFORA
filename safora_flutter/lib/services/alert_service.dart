@@ -314,7 +314,7 @@ class AlertService {
               final bool videoReady = data?['videoReady'] == true;
               videoUrl = data?['latestVideoUrl']?.toString();
 
-              if ((videoReady || (videoUrl != null && videoUrl!.isNotEmpty))) {
+              if (videoReady && videoUrl != null && videoUrl!.isNotEmpty) {
                 print("✅ Video URL confirmed at attempt ${i + 1}: $videoUrl");
                 break;
               }

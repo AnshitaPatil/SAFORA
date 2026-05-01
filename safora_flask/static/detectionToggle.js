@@ -1,11 +1,10 @@
-// static/js/detectionToggle.js
-
 class DetectionToggle {
     constructor(containerId) {
-        this.container = document.getElementById(containerId);
-        this.isEnabled = false;
-        this.initialize();
-    }
+    this.container = document.getElementById(containerId);
+    this.isEnabled = false;
+    this.isToggling = false; // ✅ lock flag
+    this.initialize();
+}
 
     async initialize() {
         this.render();
@@ -14,47 +13,58 @@ class DetectionToggle {
     }
 
     async checkDetectionStatus() {
-        try {
-            const response = await fetch('/detection_status');
-            const data = await response.json();
+    // ✅ Don't poll while a toggle is in progress
+    if (this.isToggling) return;
+    try {
+        const response = await fetch('/detection_status');
+        const data = await response.json();
+        this.isEnabled = data.enabled;
+        this.updateUI();
+    } catch (error) {
+        console.error('Error checking detection status:', error);
+    }
+}
+
+  async toggleDetection() {
+    // ✅ Prevent double clicks while request is in flight
+    if (this.isToggling) return;
+    this.isToggling = true;
+    this.toggleBtn.disabled = true;
+    this.toggleBtn.style.opacity = '0.6';
+
+    try {
+        const response = await fetch('/toggle_detection', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ enabled: !this.isEnabled }),
+        });
+        
+        const data = await response.json();
+        if (data.success) {
             this.isEnabled = data.enabled;
             this.updateUI();
-        } catch (error) {
-            console.error('Error checking detection status:', error);
+            this.showNotification(
+                data.enabled 
+                    ? 'AI Detection activated. Monitoring started.' 
+                    : 'AI Detection deactivated. Monitoring stopped.',
+                data.enabled ? 'success' : 'info'
+            );
+        } else {
+            console.error('Error toggling detection:', data.error);
+            this.showNotification('Failed to toggle detection', 'error');
         }
+    } catch (error) {
+        console.error('Error toggling detection:', error);
+        this.showNotification('Error connecting to server', 'error');
+    } finally {
+        // ✅ Always re-enable button after request completes
+        this.isToggling = false;
+        this.toggleBtn.disabled = false;
+        this.toggleBtn.style.opacity = '1';
     }
-
-    async toggleDetection() {
-        try {
-            const response = await fetch('/toggle_detection', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ enabled: !this.isEnabled }),
-            });
-            
-            const data = await response.json();
-            if (data.success) {
-                this.isEnabled = data.enabled;
-                this.updateUI();
-                
-                // Show notification
-                this.showNotification(
-                    data.enabled 
-                        ? 'AI Detection activated. Monitoring started.' 
-                        : 'AI Detection deactivated. Monitoring stopped.',
-                    data.enabled ? 'success' : 'info'
-                );
-            } else {
-                console.error('Error toggling detection:', data.error);
-                this.showNotification('Failed to toggle detection', 'error');
-            }
-        } catch (error) {
-            console.error('Error toggling detection:', error);
-            this.showNotification('Error connecting to server', 'error');
-        }
-    }
+}
 
     showNotification(message, type = 'info') {
         // Create or update notification element

@@ -9,7 +9,7 @@ class SensorService {
   // ✅ Adjusted thresholds (same as your original)
   static const double SHAKE_THRESHOLD = 18.0;
   static const double MOTION_THRESHOLD = 6.0;
-  static const double GYRO_ROTATION_THRESHOLD = 1.8;
+  static const double GYRO_ROTATION_THRESHOLD = 2.5;
   static const int STABLE_COUNT_REQUIRED = 4;
   static const int BUFFER_SIZE = 20;
 
