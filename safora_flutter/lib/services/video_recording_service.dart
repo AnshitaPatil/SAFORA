@@ -19,43 +19,50 @@ class VideoRecordingService {
 
   // ── Tuneable constants ──────────────────────────────────────────
   static const int clipDurationSeconds = 20;
-  static const int cadenceSeconds = 90; // gap between clip starts
+  static const int cadenceSeconds = 22;
   // ───────────────────────────────────────────────────────────────
 
   /// Call this right after alert is created in AlertService
   static Future<void> start(String alertId, String uid) async {
-    if (_isActive) {
-      print("⚠️ VideoRecordingService already active, skipping start");
-      return;
-    }
-
-    _alertId = alertId;
-    _firebaseUid = uid;
-    _clipIndex = 0;
-    _isActive = true;
-
-    print("🎥 VideoRecordingService starting for alert: $alertId");
-
-    // Initialise rear camera
-    final bool ready = await _initCamera();
-    if (!ready) {
-      print("❌ Camera init failed — video recording aborted");
-      _isActive = false;
-      return;
-    }
-
-    // Record first clip immediately
-    await _recordAndUploadClip();
-
-    // Then repeat every cadenceSeconds
-    _cadenceTimer = Timer.periodic(
-      Duration(seconds: cadenceSeconds),
-      (_) async {
-        if (!_isActive) return;
-        await _recordAndUploadClip();
-      },
-    );
+  if (_isActive) {
+    print("⚠️ VideoRecordingService already active, skipping start");
+    return;
   }
+
+  _alertId = alertId;
+  _firebaseUid = uid;
+  _clipIndex = 0;
+  _isActive = true;
+
+  print("🎥 VideoRecordingService starting for alert: $alertId");
+
+  final bool ready = await _initCamera();
+  if (!ready) {
+    print("❌ Camera init failed — video recording aborted");
+    _isActive = false;
+    return;
+  }
+
+  // ✅ Record first clip, then start timer AFTER it finishes
+  // This prevents the timer from firing while first clip is still recording
+  await _recordAndUploadClip();
+
+  if (!_isActive) return; // stop() was called during first clip
+
+  // ✅ Now start the repeating timer — guaranteed first clip is done
+  _cadenceTimer = Timer.periodic(
+    Duration(seconds: cadenceSeconds),
+    (_) async {
+      if (!_isActive) {
+        _cadenceTimer?.cancel();
+        return;
+      }
+      // ✅ Don't await — let timer keep ticking independently
+      // _isRecording guard inside _recordAndUploadClip handles overlap
+      _recordAndUploadClip();
+    },
+  );
+}
 
   /// Call this when alert is cancelled or resolved
   static Future<void> stop() async {
@@ -123,43 +130,46 @@ class VideoRecordingService {
   }
 
   static Future<void> _recordAndUploadClip() async {
+    print("🎬 _recordAndUploadClip called — _isActive: $_isActive, _isRecording: $_isRecording, clipIndex: $_clipIndex");
     if (!_isActive || _controller == null || !_controller!.value.isInitialized) {
       print("⚠️ Skipping clip — service inactive or camera not ready");
       return;
     }
 
-    if (_isRecording) {
-      print("⚠️ Already recording, skipping overlap");
+  if (_isRecording) {
+    print("⚠️ Already recording, skipping overlap");
+    return;
+  }
+
+  final int thisIndex = _clipIndex;
+  _clipIndex++;
+
+  _isRecording = true; // ✅ set before try so catch can always reset it
+  try {
+    print("🔴 Recording clip $thisIndex...");
+    await _controller!.startVideoRecording();
+
+    await Future.delayed(Duration(seconds: clipDurationSeconds));
+
+    if (!_isActive) {
+      // stop() called mid-recording — stop cleanly without uploading
+      await _controller!.stopVideoRecording();
+      _isRecording = false;
       return;
     }
 
-    final int thisIndex = _clipIndex;
-    _clipIndex++;
+    final XFile videoFile = await _controller!.stopVideoRecording();
+    _isRecording = false;
+    print("⏹ Clip $thisIndex recorded: ${videoFile.path}");
 
-    try {
-      print("🔴 Recording clip $thisIndex...");
-      _isRecording = true;
-      await _controller!.startVideoRecording();
+    // Upload in background — fire and forget
+    _uploadClip(videoFile.path, thisIndex);
 
-      // Record for clipDurationSeconds
-      await Future.delayed(Duration(seconds: clipDurationSeconds));
-
-      if (!_isRecording) {
-        // stop() was called mid-recording, bail out cleanly
-        return;
-      }
-
-      final XFile videoFile = await _controller!.stopVideoRecording();
-      _isRecording = false;
-      print("⏹ Clip $thisIndex recorded: ${videoFile.path}");
-
-      // Upload in background — don't await so cadence timer isn't blocked
-      _uploadClip(videoFile.path, thisIndex);
-    } catch (e) {
-      _isRecording = false;
-      print("❌ Error recording clip $thisIndex: $e");
-    }
+  } catch (e) {
+    _isRecording = false; // ✅ always reset so next clip can proceed
+    print("❌ Error recording clip $thisIndex: $e");
   }
+}
 
   static Future<void> _uploadClip(String filePath, int index) async {
     if (_alertId == null || _firebaseUid == null) {

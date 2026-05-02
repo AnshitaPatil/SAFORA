@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🚨 Safora Live Video</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: Arial, sans-serif;
+      background: #1a1a2e;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px;
+      text-align: center;
+    }
+    h2 { color: #ff4757; margin-bottom: 8px; margin-top: 10px; }
+    #status { color: #ffa502; margin: 10px 0; font-size: 14px; }
+    #clip-info { color: #aaa; font-size: 12px; margin-bottom: 10px; }
+
+    #video-player {
+      width: 100%;
+      max-width: 400px;
+      border-radius: 10px;
+      margin: 10px 0;
+      background: black;
+    }
+
+    #timer { font-size: 48px; font-weight: bold; color: #ff4757; margin: 10px 0; }
+    #progress { width: 100%; max-width: 400px; height: 6px; background: #333; border-radius: 3px; margin: 10px 0; }
+    #progress-bar { height: 100%; background: #ff4757; border-radius: 3px; width: 0%; transition: width 1s linear; }
+
+    #mode-badge {
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: bold;
+      margin-bottom: 10px;
+      display: inline-block;
+    }
+    .badge-catchup { background: #f39c12; color: white; }
+    .badge-live    { background: #2ecc71; color: white; }
+
+    #ended-msg { display: none; color: #aaa; font-size: 14px; margin-top: 10px; }
+
+    #history-section {
+      width: 100%;
+      max-width: 400px;
+      margin-top: 20px;
+      text-align: left;
+    }
+    #history-section h3 {
+      color: #ff4757;
+      font-size: 14px;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    #clip-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .clip-item {
+      background: #2a2a4a;
+      border-radius: 10px;
+      padding: 10px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      transition: background 0.2s;
+      border: 2px solid transparent;
+    }
+    .clip-item:hover { background: #3a3a6a; }
+    .clip-item.playing {
+      border-color: #ff4757;
+      background: #3a2a4a;
+    }
+    .clip-item.playing .clip-label { color: #ff4757; }
+    .clip-label { font-size: 13px; font-weight: 600; }
+    .clip-time  { font-size: 11px; color: #aaa; }
+    .play-icon  { font-size: 18px; }
+    #no-clips-msg { color: #aaa; font-size: 13px; text-align: center; padding: 10px; }
+  </style>
+</head>
+<body>
+
+  <h2>🚨 SAFORA LIVE VIDEO</h2>
+  <p style="font-size:11px; color:#aaa;">Alert ID: <strong>{{ alert_id }}</strong></p>
+
+  <div id="timer">10:00</div>
+  <div id="progress"><div id="progress-bar"></div></div>
+  <div id="mode-badge" class="badge-catchup">⏪ Catching up...</div>
+  <div id="status">⏳ Loading clips...</div>
+  <div id="clip-info"></div>
+
+  <!-- ✅ Single video element — audio is included in the video track -->
+  <video id="video-player" controls autoplay playsinline webkit-playsinline></video>
+
+  <div id="ended-msg">✅ Live monitoring ended (10 minutes elapsed)</div>
+
+  <div id="history-section">
+    <h3>📼 Clip History</h3>
+    <div id="clip-list">
+      <div id="no-clips-msg">No clips yet...</div>
+    </div>
+  </div>
+
+<script>
+  const alertId       = "{{ alert_id }}";
+  const totalDuration = 10 * 60;
+  let elapsed         = 0;
+  let lastPlayedUrl   = null;
+  let isLiveMode      = false;
+  let currentlyPlayingIndex = -1;
+  let isUserInteracting     = false;
+  let sessionActive   = true;
+
+  let catchupClips  = [];
+  let catchupIndex  = 0;
+  let allKnownClips = [];
+
+  const player      = document.getElementById('video-player');
+  const statusEl    = document.getElementById('status');
+  const clipInfoEl  = document.getElementById('clip-info');
+  const timerEl     = document.getElementById('timer');
+  const progressBar = document.getElementById('progress-bar');
+  const endedMsg    = document.getElementById('ended-msg');
+  const modeBadge   = document.getElementById('mode-badge');
+  const clipList    = document.getElementById('clip-list');
+  const noClipsMsg  = document.getElementById('no-clips-msg');
+
+
+  // ── Countdown timer ──────────────────────────────────────────────
+  const ticker = setInterval(() => {
+    elapsed++;
+    const remaining = totalDuration - elapsed;
+    if (remaining <= 0) {
+      clearInterval(ticker);
+      clearInterval(liveFetcher);
+      sessionActive = false;
+      timerEl.textContent   = "00:00";
+      statusEl.textContent  = "✅ Monitoring ended";
+      modeBadge.textContent = "⏹ Ended";
+      endedMsg.style.display = "block";
+      return;
+    }
+    const mins = Math.floor(remaining / 60).toString().padStart(2, '0');
+    const secs = (remaining % 60).toString().padStart(2, '0');
+    timerEl.textContent = `${mins}:${secs}`;
+    progressBar.style.width = `${(elapsed / totalDuration) * 100}%`;
+  }, 1000);
+
+
+  // ── Update clip history list ─────────────────────────────────────
+  function updateClipList(clips) {
+    if (clips.length === 0) return;
+    noClipsMsg.style.display = 'none';
+
+    clips.forEach(clip => {
+      if (!document.getElementById(`clip-item-${clip.index}`)) {
+        const item = document.createElement('div');
+        item.className = 'clip-item';
+        item.id = `clip-item-${clip.index}`;
+        item.innerHTML = `
+          <div>
+            <div class="clip-label">🎬 Clip ${clip.index + 1}</div>
+            <div class="clip-time">${new Date().toLocaleTimeString()}</div>
+          </div>
+          <span class="play-icon">▶️</span>
+        `;
+        item.addEventListener('click', () => playClipFromHistory(clip.url, clip.index));
+        clipList.appendChild(item);
+      }
+    });
+
+    clipList.scrollTop = clipList.scrollHeight;
+  }
+
+
+  // ── Highlight currently playing clip ────────────────────────────
+  function setPlayingHighlight(index) {
+    document.querySelectorAll('.clip-item').forEach(el => {
+      el.classList.remove('playing');
+      el.querySelector('.play-icon').textContent = '▶️';
+    });
+    const current = document.getElementById(`clip-item-${index}`);
+    if (current) {
+      current.classList.add('playing');
+      current.querySelector('.play-icon').textContent = '🎥';
+      current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+
+
+  // ── Core: play a video clip ──────────────────────────────────────
+  // ✅ Only one playClip function — uses <source> tag for proper mp4 detection
+  function playClip(url, label, index) {
+    if (url === lastPlayedUrl) return;
+    lastPlayedUrl = url;
+    currentlyPlayingIndex = index;
+
+    player.pause();
+
+    // ✅ Set source with explicit type so browser knows it's video/mp4
+    player.innerHTML = `<source src="${url}" type="video/mp4">`;
+    player.load();
+
+    player.oncanplay = () => {
+      player.play().catch(err => {
+        statusEl.textContent = "▶️ Tap video to play";
+        console.warn("Autoplay blocked:", err);
+      });
+    };
+
+    player.onerror = () => {
+      statusEl.textContent = "⚠️ Video error — trying next clip...";
+      console.error("Video load error:", url);
+    };
+
+    statusEl.textContent   = `🔴 Playing: ${label}`;
+    clipInfoEl.textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+    if (index >= 0) setPlayingHighlight(index);
+  }
+
+
+  // ── Play clip selected from history ─────────────────────────────
+// REPLACE the entire playClipFromHistory function with this:
+function playClipFromHistory(url, index) {
+  isUserInteracting = true;
+  lastPlayedUrl = null;
+  playClip(url, `Clip ${index + 1} (history)`, index);
+
+  // ✅ Set onended AFTER playClip, using addEventListener not onended
+  // so it doesn't get wiped by innerHTML reset inside playClip
+  player.addEventListener('ended', function onHistoryEnded() {
+    player.removeEventListener('ended', onHistoryEnded); // one-time only
+    isUserInteracting = false;
+
+    if (allKnownClips.length > 0) {
+      const latest = allKnownClips[allKnownClips.length - 1];
+      lastPlayedUrl = null; // force play even if already seen
+      playClip(latest.url, `Clip ${latest.index + 1} (live)`, latest.index);
+      statusEl.textContent = "🔴 Back to live — playing latest clip";
+
+      player.addEventListener('ended', function onReturnToLive() {
+        player.removeEventListener('ended', onReturnToLive);
+        if (!sessionActive || isUserInteracting) return;
+        statusEl.textContent = "⏳ Clip ended — waiting for next...";
+      });
+    } else {
+      statusEl.textContent = "🔴 Back to live...";
+    }
+  });
+}
+
+  // ── Load all clips on open (catchup) ────────────────────────────
+  async function loadAllClips() {
+    try {
+      const res  = await fetch(`/api/all_clips/${alertId}?t=${Date.now()}`);
+      const data = await res.json();
+
+      if (data.success && data.clips.length > 0) {
+        catchupClips  = data.clips;
+        allKnownClips = data.clips;
+        updateClipList(data.clips);
+        statusEl.textContent = `📼 Found ${data.clips.length} clip(s) — playing from beginning...`;
+        playNextCatchupClip();
+      } else {
+        statusEl.textContent = "⏳ No clips yet — waiting for first clip...";
+        enterLiveMode();
+      }
+    } catch (e) {
+      statusEl.textContent = "⚠️ Could not load clips — trying live mode...";
+      enterLiveMode();
+    }
+  }
+
+
+  // ── Play next clip in catchup queue ─────────────────────────────
+  function playNextCatchupClip() {
+    if (!sessionActive) return;
+
+    if (catchupIndex >= catchupClips.length) {
+      enterLiveMode();
+      return;
+    }
+
+    const clip = catchupClips[catchupIndex];
+    catchupIndex++;
+
+    modeBadge.className   = 'badge-catchup';
+    modeBadge.textContent = `⏪ Catchup ${catchupIndex}/${catchupClips.length}`;
+
+    playClip(clip.url, `Clip ${clip.index + 1} (catchup)`, clip.index);
+
+    player.addEventListener('ended', function onCatchupEnded() {
+      player.removeEventListener('ended', onCatchupEnded);
+      if (!sessionActive || isUserInteracting) return;
+      refreshCatchupClips();
+    });
+  }
+
+
+  // ── Refresh clip list mid-catchup ────────────────────────────────
+  async function refreshCatchupClips() {
+    try {
+      const res  = await fetch(`/api/all_clips/${alertId}?t=${Date.now()}`);
+      const data = await res.json();
+      if (data.success && data.clips.length > catchupClips.length) {
+        catchupClips  = data.clips;
+        allKnownClips = data.clips;
+        updateClipList(data.clips);
+      }
+    } catch (e) {}
+    playNextCatchupClip();
+  }
+
+
+  // ── Enter live mode ──────────────────────────────────────────────
+  function enterLiveMode() {
+    isLiveMode = true;
+    modeBadge.className   = 'badge-live';
+    modeBadge.textContent = '🔴 LIVE';
+    statusEl.textContent  = "🔴 Live — waiting for next clip...";
+    clipInfoEl.textContent = "New clips load automatically every ~20 seconds";
+  }
+
+
+  // ── Poll for new clips in live mode ─────────────────────────────
+ async function fetchLatestClip() {
+  if (!isLiveMode || !sessionActive) return;
+
+  try {
+    const res  = await fetch(`/api/all_clips/${alertId}?t=${Date.now()}`);
+    const data = await res.json();
+
+    if (data.success && data.clips.length > 0) {
+      // ✅ Always update history list even if user is watching old clip
+      if (data.clips.length > allKnownClips.length) {
+        allKnownClips = data.clips;
+        updateClipList(data.clips);
+      }
+
+      const latest = data.clips[data.clips.length - 1];
+
+      // ✅ Only auto-play new clip if user is NOT watching history
+      if (!isUserInteracting && latest.url !== lastPlayedUrl) {
+        playClip(latest.url, `Clip ${latest.index + 1} (live)`, latest.index);
+        player.addEventListener('ended', function onLiveEnded() {
+          player.removeEventListener('ended', onLiveEnded);
+          if (!sessionActive || isUserInteracting) return;
+          statusEl.textContent = "⏳ Clip ended — waiting for next...";
+        });
+      } else if (isUserInteracting) {
+        // ✅ Silently note new clip is ready for when history finishes
+        const latest = data.clips[data.clips.length - 1];
+        statusEl.textContent = `📦 Clip ${latest.index + 1} ready — resumes after history`;
+      }
+    }
+  } catch (e) {
+    statusEl.textContent = "⚠️ Could not load clip — retrying...";
+  }
+}
+
+
+  // ── Start ────────────────────────────────────────────────────────
+  const liveFetcher = setInterval(fetchLatestClip, 5000);
+  loadAllClips();
+</script>
+
+</body>
+</html>

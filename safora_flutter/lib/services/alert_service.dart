@@ -7,7 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
-import 'audio_recording_service.dart';
+import 'video_recording_service.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
@@ -291,73 +291,86 @@ class AlertService {
 
         // ✅ SMS 2 — Poll for video URL in background, send when ready
         // Captured variables passed into closure safely as plain types
+        
+
+         // ✅ Capture viewer link BEFORE entering background Future
+        final String capturedFlaskUrl = await ApiService.detectFlaskUrl();
+        final String viewerLink = '$capturedFlaskUrl/live/$alertId';
+
         final String capturedAlertId = alertId;
         final List<String> capturedPhoneNumbers = List.from(phoneNumbers);
 
-        Future(() async {
-          print("⏳ Background: waiting for video URL...");
-          String? videoUrl;
 
-          // Initial buffer — give Flask time to finish recording and uploading
-          await Future.delayed(const Duration(seconds: 20));
+Future(() async {
+  print("⏳ Background: waiting for first video clip...");
 
-          for (int i = 0; i < 24; i++) { // 24 × 5s = 2 minutes
-            await Future.delayed(const Duration(seconds: 5));
+  // Wait for Flutter VideoRecordingService to record and upload first clip
+  await Future.delayed(const Duration(seconds: 20));
 
-            try {
-              final alertDoc = await _firestore
-                  .collection('alerts')
-                  .doc(capturedAlertId)
-                  .get();
+  bool clipReady = false;
+  for (int i = 0; i < 24; i++) {
+    await Future.delayed(const Duration(seconds: 5));
+    try {
+      final alertDoc = await _firestore
+          .collection('alerts')
+          .doc(capturedAlertId)
+          .get();
 
-              final data = alertDoc.data();
-              final bool videoReady = data?['videoReady'] == true;
-              videoUrl = data?['latestVideoUrl']?.toString();
+      final data = alertDoc.data();
+      clipReady = data?['videoReady'] == true;
 
-              if (videoReady && videoUrl != null && videoUrl!.isNotEmpty) {
-                print("✅ Video URL confirmed at attempt ${i + 1}: $videoUrl");
-                break;
-              }
+      if (clipReady) {
+        print("✅ First clip ready at attempt ${i + 1}");
+        break;
+      }
+      print("⏳ Clip not ready yet... attempt ${i + 1}/24");
+    } catch (e) {
+      print("❌ Error polling: $e");
+    }
+  }
 
-              print("⏳ Video not ready yet... attempt ${i + 1}/24");
-            } catch (e) {
-              print("❌ Error polling for video URL: $e");
-            }
-          }
+  if (clipReady) {
+    // ✅ Send viewer page URL — NOT the raw Supabase URL
+    final videoMessage =
+        "🎥 SAFORA LIVE VIDEO\n"
+        "Watch live: $viewerLink";
 
-          if (videoUrl != null && videoUrl!.isNotEmpty) {
-            final videoMessage =
-                "🎥 SAFORA VIDEO EVIDENCE\n"
-                "Tap to play: $videoUrl";
+    print("📤 Sending viewer link: $viewerLink");
+    int videoSmsCount = 0;
+    for (final number in capturedPhoneNumbers) {
+      final ok = await sendRealSms(number, videoMessage);
+      if (ok) videoSmsCount++;
+    }
+    Fluttertoast.showToast(
+      msg: "🎥 Live video link sent to $videoSmsCount contact(s).",
+      backgroundColor: Colors.green,
+      textColor: Colors.white,
+    );
+    print("✅ Viewer link SMS sent to $videoSmsCount contact(s)");
+  } else {
+    // ✅ Even if no clip arrived in time, still send the viewer link
+    // The viewer page will wait and show clips once they arrive
+    final videoMessage =
+        "🎥 SAFORA LIVE VIDEO\n"
+        "Watch live: $viewerLink";
 
-            print("📤 Sending video SMS to ${capturedPhoneNumbers.length} contact(s)...");
-            int videoSmsCount = 0;
-            for (final number in capturedPhoneNumbers) {
-              final ok = await sendRealSms(number, videoMessage);
-              if (ok) videoSmsCount++;
-            }
-
-            Fluttertoast.showToast(
-              msg: "🎥 Video evidence sent to $videoSmsCount contact(s).",
-              backgroundColor: Colors.green,
-              textColor: Colors.white,
-            );
-            print("✅ Video SMS sent to $videoSmsCount contact(s)");
-          } else {
-            print("⚠️ Video URL never appeared after 2 minutes — skipping video SMS");
-          }
-        });
+    print("⚠️ No clip confirmed but sending viewer link anyway");
+    for (final number in capturedPhoneNumbers) {
+      await sendRealSms(number, videoMessage);
+    }
+  }
+});
 
       } catch (e) {
         print("❌ Location/SMS step failed: $e");
       }
 
       // ✅ Start audio recording and location updates
-      AudioRecordingService.start(alertId, uid);
+      VideoRecordingService.start(alertId, uid);
       startLocationUpdates(alertId);
 
-      Future.delayed(const Duration(minutes: 2), () {
-        AudioRecordingService.stop();
+      Future.delayed(const Duration(minutes: 10), () {
+        VideoRecordingService.stop();
       });
 
     } catch (e) {
@@ -382,7 +395,7 @@ class AlertService {
       const Duration(seconds: 10),
       (timer) async {
         ticks++;
-        if (ticks > 12) {
+        if (ticks > 60) {
           timer.cancel();
           print("🛑 Location updates stopped");
           return;

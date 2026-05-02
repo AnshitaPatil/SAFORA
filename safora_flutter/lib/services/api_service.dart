@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http;
 
 class ApiService {
   // ✅ Use your actual network IP (from Flask logs)
-  static const String _defaultLocalIp = "http://192.168.1.2:5000";
+  static const String _defaultLocalIp = "http://192.168.1.8:5000";
   //static const String _defaultLocalIp = "http://10.45.192.127:5000";
 
   /// ✅ Automatically detects Flask server URL

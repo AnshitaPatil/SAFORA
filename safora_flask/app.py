@@ -873,9 +873,22 @@ def upload_clip():
         file_bytes = clip_file.read()
         object_path = f"{firebase_uid}/{alert_id}_clip{clip_index}.mp4"
 
-        supabase.storage.from_(SUPABASE_BUCKET).upload(object_path, file_bytes, {"content-type": "video/mp4"})
+        supabase.storage.from_(SUPABASE_BUCKET).upload(
+            object_path,
+            file_bytes,
+           {
+                 "content-type": "video/mp4",
+                 "x-upsert": "true"          # prevent duplicate errors on retry
+           }
+        )
         signed = supabase.storage.from_(SUPABASE_BUCKET).create_signed_url(object_path, 86400)
-        clip_url = signed["signedURL"]
+        clip_url = (signed.get("signedURL") 
+                 or signed.get("signedUrl") 
+                 or signed.get("data", {}).get("signedUrl", ""))
+
+        if not clip_url:
+            logging.error(f"Supabase signed URL response: {signed}")
+            raise Exception("Could not extract signed URL from Supabase response")
 
         db.collection("alerts").document(alert_id).update({
             "latestVideoUrl": clip_url,

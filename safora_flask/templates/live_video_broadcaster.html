@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Safora Broadcaster</title>
+  <style>
+    body { margin: 0; background: #000; }
+    video { width: 100%; height: 100vh; object-fit: cover; }
+    #status {
+      position: fixed; top: 10px; left: 10px;
+      color: #0f0; font-family: monospace; font-size: 12px;
+      background: rgba(0,0,0,0.5); padding: 4px 8px; border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <video id="preview" autoplay muted playsinline></video>
+  <div id="status">Starting...</div>
+
+<script>
+  // Read params injected by Flutter via URL
+  const params     = new URLSearchParams(window.location.search);
+  const SESSION_ID = params.get('alert_id')    || 'unknown';
+  const UID        = params.get('firebase_uid') || 'unknown';
+  const SERVER     = window.location.origin;
+  const statusEl   = document.getElementById('status');
+
+  let clipIndex = 0;
+
+  async function startBroadcast() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: 640, height: 480 },
+        audio: true
+      });
+
+      document.getElementById('preview').srcObject = stream;
+
+      // Pick best supported codec — same pattern as your audio recorder
+      const mimeType = [
+        'video/webm;codecs=vp8,opus',
+        'video/webm;codecs=vp9,opus',
+        'video/webm',
+        'video/mp4'
+      ].find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
+
+      const recorder = new MediaRecorder(stream, {
+        mimeType,
+        videoBitsPerSecond: 400000,  // ~400kbps — good for mobile upload
+        audioBitsPerSecond: 64000
+      });
+
+      recorder.ondataavailable = async (e) => {
+        if (!e.data || e.data.size < 1000) return;  // skip tiny/empty chunks
+
+        const formData = new FormData();
+        const ext = mimeType.includes('mp4') ? 'mp4' : 'webm';
+        formData.append('clip', e.data, `clip_${clipIndex}.${ext}`);
+        formData.append('alert_id', SESSION_ID);
+        formData.append('firebase_uid', UID);
+        formData.append('clip_index', String(clipIndex));
+
+        try {
+          const res = await fetch(`${SERVER}/api/upload_clip`, {
+            method: 'POST',
+            body: formData
+          });
+          const json = await res.json();
+          if (json.success) {
+            statusEl.textContent = `🔴 LIVE — clip ${clipIndex} uploaded`;
+            clipIndex++;
+          } else {
+            statusEl.textContent = `⚠️ Upload failed: ${json.error}`;
+          }
+        } catch (err) {
+          statusEl.textContent = `❌ Network error: ${err.message}`;
+        }
+      };
+
+      // ✅ Same pattern as your AudioRecordingService — chunk every 8 seconds
+      recorder.start(8000);
+      statusEl.textContent = '🔴 LIVE — Session: ' + SESSION_ID;
+
+      // Tell Flutter we started (SaforaChannel is registered in VideoRecordingService)
+      if (window.SaforaChannel) {
+        window.SaforaChannel.postMessage(JSON.stringify({
+          type: 'started',
+          alertId: SESSION_ID
+        }));
+      }
+
+      // Auto-stop after 5 minutes (300s)
+      setTimeout(() => {
+        recorder.stop();
+        stream.getTracks().forEach(t => t.stop());
+        statusEl.textContent = '⏹ Recording stopped';
+        if (window.SaforaChannel) {
+          window.SaforaChannel.postMessage(JSON.stringify({ type: 'stopped' }));
+        }
+      }, 300000);
+
+    } catch (err) {
+      statusEl.textContent = '❌ ' + err.message;
+      if (window.SaforaChannel) {
+        window.SaforaChannel.postMessage(JSON.stringify({
+          type: 'error',
+          message: err.message
+        }));
+      }
+    }
+  }
+
+  startBroadcast();
+</script>
+</body>
+</html>
