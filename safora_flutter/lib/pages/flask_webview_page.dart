@@ -433,31 +433,6 @@ class _FlaskWebPageState extends State<FlaskWebPage> {
             icon: const Icon(Icons.arrow_back),
             onPressed: _goBack,
           ),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.bug_report),
-              onPressed: _debugUserDocuments,
-            ),
-            IconButton(
-              icon: const Icon(Icons.sms),
-              onPressed: _testAlert,
-            ),
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: _retryConnection,
-            ),
-            IconButton(
-              icon: const Icon(Icons.check_circle),
-              color: Colors.green,
-              tooltip: "Test Firestore Write",
-              onPressed: () {
-                nameController.text = "Test User";
-                phoneController.text = "919175397501";
-                print("🔥 TEST: Writing Test User + Number to Firestore...");
-                _debugUserDocuments();
-              },
-            ),
-          ],
         ),
         body: _hasError
             ? Center(

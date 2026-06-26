@@ -473,8 +473,7 @@
 </head>
 <body>
  
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.9.6/lottie.min.js"></script>
-    <div id="animationContainer" style=" cursor: pointer;"></div>
+    
 
     <header class="header">
         <div class="header-content">
@@ -500,13 +499,7 @@
     </script>
     <main class="main-content">
         <div class="map-section">
-            <div id="locationInfo">
-                <div id="status">Status: Waiting for location...</div>
-                <div id="speed">Speed: 0 km/h</div>
-                <div id="accuracy">Accuracy: -- meters</div>
-                <div id="lastUpdate">Last Update: --</div>
-            </div>
-            <div id="map"></div>
+          
             <a href="/emergency" class="emergency-button">
                 <i class="fas fa-exclamation-triangle"></i>
                 <span>Emergency</span>
@@ -549,29 +542,7 @@
             <button class="btn btn-primary" id="saveKeyword">Save Keyword</button>
         </div>
     </div>
-    <script>
-        // Select the container
-        const container = document.getElementById('animationContainer');
-
-        // Load the animation
-        const animation = lottie.loadAnimation({
-            container: container,          
-            renderer: 'svg',               
-            loop: true,                    
-            autoplay: true,                
-            path: './static/sir.json' // Check the path to your JSON file
-        });
-
-        // Log errors if loading fails
-        animation.addEventListener('data_failed', function() {
-            console.error("Animation failed to load. Please check the JSON file.");
-        });
-
-        // Redirect on click
-        container.addEventListener('click', function() {
-            window.location.href = '/chatbot';
-        });
-    </script>
+    
 
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
